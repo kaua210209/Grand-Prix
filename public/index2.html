@@ -1,0 +1,890 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Doces Mirahy — Sistema de Classificação 3D</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #0a0a0f; overflow: hidden; font-family: 'Courier New', monospace; }
+  #canvas-container { width: 100vw; height: 100vh; }
+  canvas { display: block; }
+ 
+  #hud {
+    position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+    pointer-events: none; z-index: 10;
+  }
+ 
+  #title-bar {
+    position: fixed; top: 0; left: 0; right: 0;
+    background: linear-gradient(to bottom, rgba(10,10,15,0.95), transparent);
+    padding: 18px 28px 40px;
+    pointer-events: none;
+  }
+  #title-bar h1 {
+    font-family: Georgia, serif;
+    font-size: 13px; font-weight: normal;
+    color: #c8a96e; letter-spacing: 3px; text-transform: uppercase;
+  }
+  #title-bar p {
+    font-size: 10px; color: #4a4a5a; letter-spacing: 2px; margin-top: 3px;
+  }
+ 
+  #controls-hint {
+    position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+    display: flex; gap: 24px; align-items: center;
+    background: rgba(10,10,15,0.85); border: 1px solid rgba(200,169,110,0.2);
+    padding: 10px 24px; border-radius: 30px;
+    pointer-events: none;
+  }
+  .hint { font-size: 10px; color: #5a5a6a; letter-spacing: 1.5px; display: flex; align-items: center; gap: 6px; }
+  .hint-key {
+    border: 1px solid rgba(200,169,110,0.35); border-radius: 4px;
+    padding: 2px 7px; color: #c8a96e; font-size: 9px;
+  }
+ 
+  #panel {
+    position: fixed; right: 0; top: 0; bottom: 0; width: 240px;
+    background: rgba(10,10,15,0.92); border-left: 1px solid rgba(200,169,110,0.15);
+    padding: 60px 20px 20px; overflow-y: auto; pointer-events: all;
+  }
+  #panel h2 {
+    font-size: 9px; letter-spacing: 3px; color: #c8a96e;
+    text-transform: uppercase; margin-bottom: 16px;
+    border-bottom: 1px solid rgba(200,169,110,0.2); padding-bottom: 8px;
+  }
+  .metric {
+    display: flex; justify-content: space-between; align-items: baseline;
+    margin-bottom: 12px; padding-bottom: 12px;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+  }
+  .metric-label { font-size: 9px; color: #4a4a5a; letter-spacing: 1.5px; }
+  .metric-value { font-size: 18px; color: #e8e8e8; font-weight: bold; }
+  .metric-value.green { color: #4caf50; }
+  .metric-value.red { color: #e53935; }
+  .metric-value.amber { color: #c8a96e; }
+ 
+  #status-bar {
+    margin-top: 24px; padding: 12px;
+    background: rgba(76,175,80,0.08); border: 1px solid rgba(76,175,80,0.2);
+    border-radius: 6px;
+  }
+  #status-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #4caf50; margin-right: 6px; animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
+  #status-text { font-size: 9px; color: #4caf50; letter-spacing: 2px; }
+ 
+  .toggle-btn {
+    pointer-events: all; cursor: pointer;
+    width: 100%; margin-top: 8px; padding: 8px;
+    background: rgba(200,169,110,0.08); border: 1px solid rgba(200,169,110,0.25);
+    border-radius: 4px; color: #c8a96e; font-size: 9px; letter-spacing: 2px;
+    text-transform: uppercase; font-family: inherit; transition: all 0.2s;
+  }
+  .toggle-btn:hover { background: rgba(200,169,110,0.18); }
+  .toggle-btn.active { background: rgba(200,169,110,0.25); border-color: #c8a96e; }
+ 
+  #label-container {
+    position: fixed; top: 0; left: 0; pointer-events: none;
+    z-index: 20; width: 100%; height: 100%;
+  }
+  .label3d {
+    position: absolute; transform: translate(-50%, -100%);
+    background: rgba(10,10,15,0.88); border: 1px solid rgba(200,169,110,0.4);
+    padding: 4px 10px; border-radius: 3px;
+    font-size: 9px; color: #c8a96e; letter-spacing: 1.5px;
+    white-space: nowrap; pointer-events: none;
+    transition: opacity 0.3s;
+  }
+  .label3d::after {
+    content: ''; position: absolute; bottom: -6px; left: 50%; transform: translateX(-50%);
+    border: 3px solid transparent; border-top-color: rgba(200,169,110,0.4);
+  }
+ 
+  #conveyor-speed {
+    margin-top: 16px;
+  }
+  #conveyor-speed label { font-size: 9px; color: #4a4a5a; letter-spacing: 1.5px; display: block; margin-bottom: 6px; }
+  #conveyor-speed input { width: 100%; accent-color: #c8a96e; }
+ 
+  #eject-flash {
+    position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(229,57,53,0.12); pointer-events: none; z-index: 5;
+    opacity: 0; transition: opacity 0.1s;
+  }
+</style>
+</head>
+<body>
+<div id="canvas-container"></div>
+<div id="hud">
+  <div id="title-bar">
+    <h1>Doces Mirahy</h1>
+    <p>Sistema Automatizado de Classificação — Protótipo de Bancada</p>
+  </div>
+ 
+  <div id="panel">
+    <h2>Painel de Controle</h2>
+    <div class="metric">
+      <span class="metric-label">PRODUÇÃO</span>
+      <span class="metric-value green" id="m-prod">0</span>
+    </div>
+    <div class="metric">
+      <span class="metric-label">APROVADOS</span>
+      <span class="metric-value green" id="m-aprov">0</span>
+    </div>
+    <div class="metric">
+      <span class="metric-label">REJEITADOS</span>
+      <span class="metric-value red" id="m-rej">0</span>
+    </div>
+    <div class="metric">
+      <span class="metric-label">TAXA APROVAÇÃO</span>
+      <span class="metric-value amber" id="m-taxa">—</span>
+    </div>
+ 
+    <div id="status-bar">
+      <span id="status-dot"></span>
+      <span id="status-text">SISTEMA ONLINE</span>
+    </div>
+ 
+    <div id="conveyor-speed">
+      <label>VELOCIDADE ESTEIRA</label>
+      <input type="range" id="speed-slider" min="0.5" max="3" step="0.1" value="1.2">
+    </div>
+ 
+    <button class="toggle-btn active" id="btn-labels" onclick="toggleLabels()">● Rótulos Visíveis</button>
+    <button class="toggle-btn" id="btn-auto" onclick="toggleAuto()">○ Auto-Rejeição</button>
+    <button class="toggle-btn" id="btn-wireframe" onclick="toggleWireframe()">○ Wireframe</button>
+
+    <button class="toggle-btn" id="btn-voltar" onclick="window.location.href='/'">
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <line x1="19" y1="12" x2="5" y2="12"></line>
+    <polyline points="12 19 5 12 12 5"></polyline>
+  </svg>
+  Voltar ao Dashboard
+</button>
+  </div>
+ 
+  <div id="controls-hint">
+    <div class="hint"><span class="hint-key">DRAG</span> Orbitar</div>
+    <div class="hint"><span class="hint-key">SCROLL</span> Zoom</div>
+    <div class="hint"><span class="hint-key">RIGHT DRAG</span> Pan</div>
+  </div>
+</div>
+ 
+<div id="label-container"></div>
+<div id="eject-flash"></div>
+ 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+// ─── SCENE SETUP ─────────────────────────────────────────────────────────────
+const W = window.innerWidth, H = window.innerHeight;
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+renderer.setSize(W, H);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.outputEncoding = THREE.sRGBEncoding;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.1;
+document.getElementById('canvas-container').appendChild(renderer.domElement);
+ 
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0a0a0f);
+scene.fog = new THREE.Fog(0x0a0a0f, 12, 28);
+ 
+const camera = new THREE.PerspectiveCamera(45, W/H, 0.01, 100);
+camera.position.set(4.5, 3.2, 5.5);
+camera.lookAt(0, 0.5, 0);
+ 
+// ─── MATERIALS ───────────────────────────────────────────────────────────────
+const M = {
+  aluminium: new THREE.MeshStandardMaterial({ color: 0xb8b4ae, metalness: 0.85, roughness: 0.25 }),
+  aluminiumAnod: new THREE.MeshStandardMaterial({ color: 0x8a8a88, metalness: 0.7, roughness: 0.4 }),
+  formica: new THREE.MeshStandardMaterial({ color: 0x7a7875, metalness: 0.05, roughness: 0.8 }),
+  belt: new THREE.MeshStandardMaterial({ color: 0x1a5cb8, metalness: 0.0, roughness: 0.75 }),
+  chocolate: new THREE.MeshStandardMaterial({ color: 0x7b4a2e, metalness: 0.0, roughness: 0.4 }),
+  chocShine: new THREE.MeshStandardMaterial({ color: 0x9d6240, metalness: 0.0, roughness: 0.25 }),
+  plasticRed: new THREE.MeshStandardMaterial({ color: 0xcc1a1a, metalness: 0.0, roughness: 0.55 }),
+  plasticGreen: new THREE.MeshStandardMaterial({ color: 0x2e7d2e, metalness: 0.0, roughness: 0.55 }),
+  plasticBlue: new THREE.MeshStandardMaterial({ color: 0x1a3a6b, metalness: 0.1, roughness: 0.5 }),
+  inox: new THREE.MeshStandardMaterial({ color: 0xe0e0e0, metalness: 0.92, roughness: 0.08 }),
+  inoxInner: new THREE.MeshStandardMaterial({ color: 0xf5f5f5, metalness: 0.1, roughness: 0.7 }),
+  pcbGreen: new THREE.MeshStandardMaterial({ color: 0x1b5e20, metalness: 0.2, roughness: 0.6 }),
+  plastic: new THREE.MeshStandardMaterial({ color: 0x2a2a35, metalness: 0.1, roughness: 0.6 }),
+  rubber: new THREE.MeshStandardMaterial({ color: 0x1a1a1a, metalness: 0.0, roughness: 0.9 }),
+  emissiveGreen: new THREE.MeshStandardMaterial({ color: 0x00ff44, emissive: 0x00ff44, emissiveIntensity: 0.6, metalness: 0, roughness: 0.5 }),
+  emissiveRed: new THREE.MeshStandardMaterial({ color: 0xff2222, emissive: 0xff2222, emissiveIntensity: 0.6, metalness: 0, roughness: 0.5 }),
+  emissiveBlue: new THREE.MeshStandardMaterial({ color: 0x4488ff, emissive: 0x4488ff, emissiveIntensity: 0.5, metalness: 0, roughness: 0.5 }),
+  screen: new THREE.MeshStandardMaterial({ color: 0x1a2a4a, emissive: 0x0a1428, emissiveIntensity: 0.8, metalness: 0.1, roughness: 0.3 }),
+  gold: new THREE.MeshStandardMaterial({ color: 0xc8a96e, metalness: 0.8, roughness: 0.2 }),
+};
+ 
+const allMeshes = [];
+function mesh(geo, mat, rx, ry, rz) {
+  const m = new THREE.Mesh(geo, mat);
+  m.castShadow = true; m.receiveShadow = true;
+  if (rx !== undefined) m.rotation.set(rx, ry, rz);
+  allMeshes.push(m);
+  return m;
+}
+function box(w,h,d) { return new THREE.BoxGeometry(w,h,d); }
+function cyl(rt,rb,h,s=16) { return new THREE.CylinderGeometry(rt,rb,h,s); }
+ 
+// ─── LIGHTING ─────────────────────────────────────────────────────────────────
+const ambLight = new THREE.AmbientLight(0x1a1a2e, 0.4);
+scene.add(ambLight);
+ 
+const keyLight = new THREE.DirectionalLight(0xfff5e8, 2.8);
+keyLight.position.set(-5, 8, 4);
+keyLight.castShadow = true;
+keyLight.shadow.mapSize.set(2048, 2048);
+keyLight.shadow.camera.near = 0.1; keyLight.shadow.camera.far = 30;
+keyLight.shadow.camera.left = -8; keyLight.shadow.camera.right = 8;
+keyLight.shadow.camera.top = 8; keyLight.shadow.camera.bottom = -8;
+keyLight.shadow.bias = -0.001;
+scene.add(keyLight);
+ 
+const fillLight = new THREE.DirectionalLight(0xd0e8ff, 0.6);
+fillLight.position.set(5, 4, 3);
+scene.add(fillLight);
+ 
+const rimLight = new THREE.DirectionalLight(0xffd080, 1.2);
+rimLight.position.set(3, 6, -5);
+scene.add(rimLight);
+ 
+const bottomLight = new THREE.HemisphereLight(0x1a1a2e, 0x0a0a0f, 0.3);
+scene.add(bottomLight);
+ 
+// ─── FLOOR ────────────────────────────────────────────────────────────────────
+const floorGeo = new THREE.PlaneGeometry(20, 20);
+const floorMat = new THREE.MeshStandardMaterial({ color: 0x0d0d12, metalness: 0.1, roughness: 0.95 });
+const floor = new THREE.Mesh(floorGeo, floorMat);
+floor.rotation.x = -Math.PI/2; floor.position.y = -0.82; floor.receiveShadow = true;
+scene.add(floor);
+ 
+// Grid helper
+const grid = new THREE.GridHelper(16, 32, 0x1a1a2e, 0x14141e);
+grid.position.y = -0.819;
+scene.add(grid);
+ 
+// ─── BANCADA ─────────────────────────────────────────────────────────────────
+const bancada = new THREE.Group();
+// Tampo
+const tampo = mesh(box(5.5, 0.07, 1.4), M.formica);
+tampo.position.set(0, 0, 0);
+bancada.add(tampo);
+// Perfil borda
+const bordaPerfil = mesh(box(5.5, 0.025, 0.025), M.aluminium);
+bordaPerfil.position.set(0, 0.047, 0.7);
+bancada.add(bordaPerfil);
+// Pernas
+[[-2.6,-0.55,-0.58],[2.6,-0.55,-0.58],[-2.6,-0.55,0.58],[2.6,-0.55,0.58]].forEach(([x,y,z])=>{
+  const leg = mesh(box(0.06,1.0,0.06), M.aluminium);
+  leg.position.set(x,y,z); bancada.add(leg);
+});
+// Travessa
+const travessa = mesh(box(5.2, 0.05, 0.04), M.aluminiumAnod);
+travessa.position.set(0, -0.7, 0);
+bancada.add(travessa);
+bancada.position.set(0, -0.3, 0);
+scene.add(bancada);
+ 
+// ─── ESTRUTURA PERFIS ALUMÍNIO ────────────────────────────────────────────────
+const estrutura = new THREE.Group();
+function perfil(w,h,d,x,y,z) {
+  const p = mesh(box(w,h,d), M.aluminiumAnod);
+  p.position.set(x,y,z);
+  estrutura.add(p); return p;
+}
+// Base rails longitudinal
+perfil(5.0, 0.04, 0.04, 0, 0.07, -0.55);
+perfil(5.0, 0.04, 0.04, 0, 0.07, 0.55);
+// Uprights
+perfil(0.04, 0.8, 0.04, -2.4, 0.47, -0.55);
+perfil(0.04, 0.8, 0.04,  2.4, 0.47, -0.55);
+perfil(0.04, 0.8, 0.04, -2.4, 0.47, 0.55);
+perfil(0.04, 0.8, 0.04,  2.4, 0.47, 0.55);
+// Top rails
+perfil(5.0, 0.04, 0.04, 0, 0.87, -0.55);
+perfil(5.0, 0.04, 0.04, 0, 0.87, 0.55);
+perfil(0.04, 0.04, 1.14, -2.4, 0.87, 0);
+perfil(0.04, 0.04, 1.14,  2.4, 0.87, 0);
+estrutura.position.set(0, -0.26, 0);
+scene.add(estrutura);
+ 
+// ─── ESTEIRA ─────────────────────────────────────────────────────────────────
+const esteiraGroup = new THREE.Group();
+// Belt surface
+const beltGeo = new THREE.BoxGeometry(4.8, 0.055, 0.65);
+const belt = mesh(beltGeo, M.belt);
+belt.position.set(0, 0, 0);
+esteiraGroup.add(belt);
+// Belt texture stripes
+for (let i = -2.3; i < 2.4; i += 0.12) {
+  const stripe = mesh(box(0.02, 0.056, 0.65), M.rubber);
+  stripe.position.set(i, 0, 0);
+  esteiraGroup.add(stripe);
+}
+// Rollers
+[-2.42, 2.42].forEach(x => {
+  const roller = mesh(cyl(0.09, 0.09, 0.68, 24), M.aluminium);
+  roller.rotation.z = Math.PI/2; roller.position.set(x, 0, 0);
+  esteiraGroup.add(roller);
+});
+// Motor
+const motorHousing = mesh(box(0.22, 0.18, 0.18), M.aluminiumAnod);
+motorHousing.position.set(-2.55, 0, 0);
+esteiraGroup.add(motorHousing);
+const motorShaft = mesh(cyl(0.02, 0.02, 0.12), M.aluminium);
+motorShaft.rotation.z = Math.PI/2; motorShaft.position.set(-2.66, 0, 0);
+esteiraGroup.add(motorShaft);
+ 
+esteiraGroup.position.set(0, 0.12, 0);
+scene.add(esteiraGroup);
+ 
+// ─── SENSOR DE PRESENÇA ───────────────────────────────────────────────────────
+const sensorGroup = new THREE.Group();
+const sensorBody = mesh(cyl(0.04, 0.04, 0.16, 16), M.plasticBlue);
+sensorBody.rotation.x = Math.PI/2; sensorBody.position.set(0, 0, 0);
+const sensorFace = mesh(cyl(0.035, 0.035, 0.008, 16), M.emissiveBlue);
+sensorFace.rotation.x = Math.PI/2; sensorFace.position.set(0, 0, 0.085);
+// Bracket
+const bracket = mesh(box(0.015, 0.12, 0.06), M.aluminium);
+bracket.position.set(-0.06, 0, 0);
+sensorGroup.add(sensorBody, sensorFace, bracket);
+sensorGroup.position.set(-1.7, 0.28, 0.42);
+scene.add(sensorGroup);
+ 
+// Sensor beam (animated)
+const beamMat = new THREE.MeshBasicMaterial({ color: 0x4488ff, opacity: 0.15, transparent: true });
+const beamGeo = new THREE.CylinderGeometry(0.003, 0.003, 0.85, 6);
+const sensorBeam = new THREE.Mesh(beamGeo, beamMat);
+sensorBeam.rotation.x = Math.PI/2; sensorBeam.position.set(-1.7, 0.28, 0.0);
+scene.add(sensorBeam);
+ 
+// ─── DETECTOR DE METAL ───────────────────────────────────────────────────────
+const detectorGroup = new THREE.Group();
+// Outer shell (inox)
+const detOuter = mesh(box(0.55, 0.26, 0.75), M.inox);
+detOuter.position.set(0,0,0);
+// Inner void (white)
+const detInner = mesh(box(0.53, 0.18, 0.73), M.inoxInner);
+detInner.position.set(0, 0, 0);
+// Front/back face with opening
+const detFaceL = mesh(box(0.55, 0.26, 0.04), M.inox);
+detFaceL.position.set(0, 0, -0.375);
+const detFaceR = mesh(box(0.55, 0.26, 0.04), M.inox);
+detFaceR.position.set(0, 0, 0.375);
+// Label plate
+const labelPlate = mesh(box(0.2, 0.04, 0.01), M.aluminiumAnod);
+labelPlate.position.set(0, 0.14, 0);
+// Indicator LED
+const detLed = mesh(cyl(0.012, 0.012, 0.015, 8), M.emissiveGreen);
+detLed.position.set(0.18, 0.13, 0);
+detectorGroup.add(detOuter, detInner, detFaceL, detFaceR, labelPlate, detLed);
+detectorGroup.position.set(0.1, 0.27, 0);
+scene.add(detectorGroup);
+ 
+// ─── LAYOUT EJECTOR + CAIXA REJEITADOS ───────────────────────────────────────
+//
+//  Vista de cima (eixo Z aponta para cima neste diagrama):
+//
+//   esteira  ←  chocolates se movem em +X  →
+//   ────────────────────────────────────────
+//   Z=-0.50  (borda traseira da esteira)
+//
+//   [EJECTOR]   empurra em -Z   →→→   [CAIXA REJEITADOS]
+//    x=1.2, z=+0.55              x=1.2, z=-0.62
+//
+//  O cilindro está na lateral FRONTAL (+Z) da esteira.
+//  A haste avança em direção -Z, empurrando o chocolate para -Z.
+//  A caixa de rejeitados fica do lado -Z (lateral traseira), à direita do ejector.
+//
+// HITBOX X: o chocolate deve estar entre x=1.0 e x=1.4 para ser ejetado.
+// Chocolates marcados como rejected só disparam o pistão ao entrar nessa faixa.
+ 
+const EJECTOR_X = 1.2;     // centro X do pistão
+const HITBOX_HALF = 0.22;  // meia-largura da hitbox (±)
+ 
+const ejectorGroup = new THREE.Group();
+ 
+// Cylinder body — horizontal, alinhado no eixo Z (avança em -Z)
+const ejCyl = mesh(cyl(0.04, 0.04, 0.52, 16), M.aluminium);
+ejCyl.rotation.x = Math.PI/2;
+ejCyl.position.set(0, 0, 0);
+ 
+// Mounting bracket em L fixado no perfil de alumínio da estrutura frontal
+const ejBracketH = mesh(box(0.16, 0.025, 0.025), M.aluminiumAnod);
+ejBracketH.position.set(0, 0.055, 0.28);
+const ejBracketV = mesh(box(0.025, 0.14, 0.025), M.aluminiumAnod);
+ejBracketV.position.set(0, -0.01, 0.28);
+ 
+// Piston rod — no eixo Z, avança em -Z (em direção à esteira → caixa)
+const ejRod = mesh(cyl(0.015, 0.015, 0.30, 8), M.inox);
+ejRod.rotation.x = Math.PI/2;
+ejRod.position.set(0, 0, -0.37);
+ 
+// Push plate — face voltada para -Z, encosta no chocolate
+const ejPlate = mesh(box(0.14, 0.10, 0.016), M.inoxInner);
+ejPlate.position.set(0, 0, -0.53);
+ 
+// Pneumatic fittings nas duas câmaras do cilindro
+const fit1 = mesh(cyl(0.012, 0.012, 0.04, 8), M.gold);
+fit1.position.set(0.04, 0.05, 0.15);
+const fit2 = mesh(cyl(0.012, 0.012, 0.04, 8), M.gold);
+fit2.position.set(0.04, 0.05, -0.10);
+ 
+ejectorGroup.add(ejCyl, ejBracketH, ejBracketV, ejRod, ejPlate, fit1, fit2);
+ 
+// Ejector posicionado na lateral FRONTAL (+Z) da esteira, à esquerda da caixa
+ejectorGroup.position.set(EJECTOR_X, 0.215, 0.60);
+scene.add(ejectorGroup);
+ 
+// Tubo pneumático — saindo do topo do cilindro, subindo pelo perfil estrutural frontal
+const tubePoints = [
+  new THREE.Vector3(EJECTOR_X + 0.04, 0.35, 0.65),
+  new THREE.Vector3(EJECTOR_X + 0.04, 0.58, 0.72),
+  new THREE.Vector3(EJECTOR_X + 0.2,  0.80, 0.68),
+  new THREE.Vector3(EJECTOR_X + 0.6,  0.88, 0.60),
+];
+const tubeCurve = new THREE.CatmullRomCurve3(tubePoints);
+const tubeMat = new THREE.MeshStandardMaterial({ color: 0x85b7eb, metalness: 0, roughness: 0.5, opacity: 0.85, transparent: true });
+const tubeGeo = new THREE.TubeGeometry(tubeCurve, 24, 0.012, 6, false);
+const pneumTube = new THREE.Mesh(tubeGeo, tubeMat);
+scene.add(pneumTube);
+ 
+// ─── CAIXA REJEITADOS ─────────────────────────────────────────────────────────
+// Posicionada na lateral TRASEIRA (-Z) da esteira, alinhada com o ejector em X
+// O ejector (frente +Z) empurra o chocolate, ele voa para -Z e cai na caixa (-Z)
+const rejBox = new THREE.Group();
+const rb_base  = mesh(box(0.72, 0.04, 0.55), M.plasticRed); rb_base.position.set(0,-0.18,0);
+const rb_front = mesh(box(0.72, 0.32, 0.03), M.plasticRed); rb_front.position.set(0,0, 0.275);
+const rb_back  = mesh(box(0.72, 0.32, 0.03), M.plasticRed); rb_back.position.set(0,0,-0.275);
+const rb_left  = mesh(box(0.03, 0.32, 0.55), M.plasticRed); rb_left.position.set(-0.375,0,0);
+const rb_right = mesh(box(0.03, 0.32, 0.55), M.plasticRed); rb_right.position.set(0.375,0,0);
+rejBox.add(rb_base, rb_front, rb_back, rb_left, rb_right);
+// Centrada em X com o ejector, deslocada para -Z (atrás da esteira)
+rejBox.position.set(EJECTOR_X, -0.04, -0.78);
+scene.add(rejBox);
+ 
+// ─── CAIXA APROVADOS ──────────────────────────────────────────────────────────
+const aprvBox = new THREE.Group();
+const ab_base = mesh(box(0.72, 0.04, 0.65), M.plasticGreen);
+ab_base.position.set(0,-0.18,0);
+const ab_front = mesh(box(0.72, 0.32, 0.03), M.plasticGreen);
+ab_front.position.set(0,0,0.325);
+const ab_back = mesh(box(0.72, 0.32, 0.03), M.plasticGreen);
+ab_back.position.set(0,0,-0.325);
+const ab_left = mesh(box(0.03, 0.32, 0.65), M.plasticGreen);
+ab_left.position.set(-0.375,0,0);
+const ab_right = mesh(box(0.03, 0.32, 0.65), M.plasticGreen);
+ab_right.position.set(0.375,0,0);
+aprvBox.add(ab_base, ab_front, ab_back, ab_left, ab_right);
+aprvBox.position.set(2.65, -0.04, 0.1);
+scene.add(aprvBox);
+ 
+// ─── UNIDADE DE CONTROLE ─────────────────────────────────────────────────────
+const controlUnit = new THREE.Group();
+// Translucent box
+const ctrlMat = new THREE.MeshStandardMaterial({ color: 0x3a3a50, metalness: 0.1, roughness: 0.5, opacity: 0.75, transparent: true });
+const ctrl_base = mesh(box(0.6, 0.04, 0.45), ctrlMat);
+ctrl_base.position.set(0,-0.18,0);
+const ctrl_front = mesh(box(0.6, 0.32, 0.03), ctrlMat);
+ctrl_front.position.set(0,0,0.225);
+const ctrl_back = mesh(box(0.6, 0.32, 0.03), ctrlMat);
+ctrl_back.position.set(0,0,-0.225);
+const ctrl_left = mesh(box(0.03, 0.32, 0.45), ctrlMat);
+ctrl_left.position.set(-0.315,0,0);
+const ctrl_right = mesh(box(0.03, 0.32, 0.45), ctrlMat);
+ctrl_right.position.set(0.315,0,0);
+// Arduino PCB
+const arduinoMat = new THREE.MeshStandardMaterial({ color: 0x1b5e20, metalness: 0.2, roughness: 0.6 });
+const pcbArduino = mesh(box(0.22, 0.012, 0.14), arduinoMat);
+pcbArduino.position.set(-0.08, -0.04, 0.02);
+// ESP Module
+const espMat = new THREE.MeshStandardMaterial({ color: 0xeeeeee, metalness: 0.3, roughness: 0.4 });
+const pcbEsp = mesh(box(0.1, 0.012, 0.055), espMat);
+pcbEsp.position.set(0.1, -0.04, -0.06);
+// Relay board
+const relayMat = new THREE.MeshStandardMaterial({ color: 0x1565c0, metalness: 0.2, roughness: 0.5 });
+const pcbRelay = mesh(box(0.22, 0.012, 0.1), relayMat);
+pcbRelay.position.set(-0.08, -0.02, -0.1);
+// LED status
+const ledGreen = mesh(cyl(0.008,0.008,0.012,6), M.emissiveGreen);
+ledGreen.position.set(0.2, 0.04, 0.08);
+const ledRed = mesh(cyl(0.008,0.008,0.012,6), M.emissiveRed);
+ledRed.position.set(0.2, 0.04, 0.04);
+const ledBlue = mesh(cyl(0.008,0.008,0.012,6), M.emissiveBlue);
+ledBlue.position.set(0.2, 0.04, 0.0);
+// Wires
+const wireColors = [0xe53935, 0x43a047, 0x1e88e5, 0xfdd835, 0xfb8c00];
+wireColors.forEach((c, i) => {
+  const wireMat = new THREE.MeshBasicMaterial({ color: c });
+  const wirePts = [
+    new THREE.Vector3(-0.08 + i*0.04, -0.02, 0.1),
+    new THREE.Vector3(-0.08 + i*0.04 + 0.02, 0.06, 0.12),
+    new THREE.Vector3(-0.08 + i*0.04 - 0.01, 0.12, 0.08),
+  ];
+  const wireCurve = new THREE.CatmullRomCurve3(wirePts);
+  const wireGeo = new THREE.TubeGeometry(wireCurve, 8, 0.005, 4);
+  const wireMesh = new THREE.Mesh(wireGeo, wireMat);
+  controlUnit.add(wireMesh);
+});
+controlUnit.add(ctrl_base, ctrl_front, ctrl_back, ctrl_left, ctrl_right, pcbArduino, pcbEsp, pcbRelay, ledGreen, ledRed, ledBlue);
+controlUnit.position.set(-2.0, 0.22, -0.18);
+scene.add(controlUnit);
+ 
+// ─── MONITOR ─────────────────────────────────────────────────────────────────
+const monitorGroup = new THREE.Group();
+// Screen frame
+const screenFrame = mesh(box(0.88, 0.56, 0.04), M.plastic);
+screenFrame.position.set(0,0,0);
+// Screen
+const screenMesh = mesh(box(0.82, 0.50, 0.02), M.screen);
+screenMesh.position.set(0,0,0.012);
+// Screen glow
+const screenGlowMat = new THREE.MeshStandardMaterial({ color: 0x2a4a8a, emissive: 0x0a2040, emissiveIntensity: 1.5, metalness: 0, roughness: 0.3, opacity: 0.9, transparent: true });
+const screenGlow = mesh(box(0.78, 0.46, 0.005), screenGlowMat);
+screenGlow.position.set(0,0,0.022);
+// Screen light
+const screenLight = new THREE.PointLight(0x2a4a8a, 0.8, 2.0);
+screenLight.position.set(0, 0, 0.2);
+monitorGroup.add(screenLight);
+// Stand
+const standNeck = mesh(box(0.03, 0.35, 0.03), M.plastic);
+standNeck.position.set(0, -0.45, 0);
+const standBase = mesh(box(0.3, 0.025, 0.22), M.plastic);
+standBase.position.set(0, -0.635, 0.05);
+// Bezel accents
+const bezelTop = mesh(box(0.88, 0.02, 0.025), M.aluminiumAnod);
+bezelTop.position.set(0, 0.285, -0.01);
+monitorGroup.add(screenFrame, screenMesh, screenGlow, standNeck, standBase, bezelTop);
+monitorGroup.position.set(-1.5, 1.0, -0.6);
+monitorGroup.rotation.y = 0.15;
+scene.add(monitorGroup);
+ 
+// Screen point light
+const monLight = new THREE.PointLight(0x3a6aaa, 0.4, 3.0);
+monLight.position.set(-1.5, 1.0, -0.3);
+scene.add(monLight);
+ 
+// ─── CONTROL CABLES ──────────────────────────────────────────────────────────
+const cableData = [
+  { pts: [[-2.0,0.5,-0.18],[-2.0,0.2,-0.18],[-1.7,0.17,0.35]], c: 0x111111 },
+  { pts: [[0.1,0.4,-0.3],[0.1,0.2,-0.3],[0.1,0.15,0.35]], c: 0x111111 },
+  { pts: [[1.2,0.45,-0.4],[1.2,0.2,-0.4],[1.2,0.15,-0.35]], c: 0x111111 },
+];
+cableData.forEach(({ pts, c }) => {
+  const cableMat = new THREE.MeshBasicMaterial({ color: c });
+  const cablePts = pts.map(p => new THREE.Vector3(...p));
+  const cableCurve = new THREE.CatmullRomCurve3(cablePts);
+  const cableGeo = new THREE.TubeGeometry(cableCurve, 10, 0.008, 4);
+  scene.add(new THREE.Mesh(cableGeo, cableMat));
+});
+ 
+// ─── CHOCOLATES (DYNAMIC) ─────────────────────────────────────────────────────
+const chocolates = [];
+function makeChocolate(x) {
+  const chocGroup = new THREE.Group();
+  const body = mesh(box(0.32, 0.06, 0.20), M.chocolate);
+  body.position.set(0, 0, 0);
+  // Grid pattern on top
+  for (let i = -1; i <= 1; i++) {
+    for (let j = -1; j <= 1; j++) {
+      const square = mesh(box(0.085, 0.005, 0.052), M.chocShine);
+      square.position.set(i * 0.1, 0.033, j * 0.065);
+      chocGroup.add(square);
+    }
+  }
+  chocGroup.add(body);
+  chocGroup.position.set(x, 0.215, 0.0);
+  scene.add(chocGroup);
+  return {
+    group: chocGroup, x, z: 0, state: 'moving',
+    ejecting: false, ejectZ: 0, ejectY: 0, rejected: false
+  };
+}
+ 
+// Start with 3 chocolates at different positions
+for (let i = 0; i < 3; i++) {
+  chocolates.push(makeChocolate(-2.2 + i * 1.8));
+}
+ 
+// ─── STATS ───────────────────────────────────────────────────────────────────
+let stats = { prod: 0, aprov: 0, rej: 0 };
+let autoReject = false;
+let showLabels = true;
+let wireframeMode = false;
+let conveyorSpeed = 1.2;
+ 
+// Fila de rejeições agendadas: IDs de chocolates marcados para rejeitar
+// Um chocolate só é ejetado quando sua posição X entra na hitbox do ejector.
+// Aprovados simplesmente passam a hitbox sem nenhuma reação.
+ 
+function updateStats() {
+  document.getElementById('m-prod').textContent = stats.prod;
+  document.getElementById('m-aprov').textContent = stats.aprov;
+  document.getElementById('m-rej').textContent = stats.rej;
+  const total = stats.aprov + stats.rej;
+  document.getElementById('m-taxa').textContent = total > 0 ? (stats.aprov/total*100).toFixed(1)+'%' : '—';
+}
+ 
+// ─── LABELS ──────────────────────────────────────────────────────────────────
+const labelDefs = [
+  { text: 'SENSOR DE PRESENÇA', worldPos: new THREE.Vector3(-1.7, 0.7, 0.55) },
+  { text: 'DETECTOR DE METAL', worldPos: new THREE.Vector3(0.1, 0.7, 0.6) },
+  { text: 'MECANISMO DE EJEÇÃO LATERAL', worldPos: new THREE.Vector3(1.2, 0.75, 0.85) },
+  { text: 'CAIXA DE REJEITADOS', worldPos: new THREE.Vector3(1.2, 0.35, -1.1) },
+  { text: 'APROVADOS', worldPos: new THREE.Vector3(2.65, 0.35, 0.55) },
+  { text: 'UNIDADE DE CONTROLE (Wi-Fi)', worldPos: new THREE.Vector3(-2.0, 0.7, -0.4) },
+  { text: 'ESTEIRA MOTORIZADA', worldPos: new THREE.Vector3(0, 0.55, 0.55) },
+  { text: 'PAINEL DOCES MIRAHY', worldPos: new THREE.Vector3(-1.5, 1.55, -0.4) },
+];
+ 
+const labelContainer = document.getElementById('label-container');
+const labelEls = [];
+labelDefs.forEach(def => {
+  const el = document.createElement('div');
+  el.className = 'label3d';
+  el.textContent = def.text;
+  labelContainer.appendChild(el);
+  labelEls.push({ el, worldPos: def.worldPos });
+});
+ 
+function updateLabels() {
+  const v = new THREE.Vector3();
+  labelEls.forEach(({ el, worldPos }) => {
+    v.copy(worldPos);
+    v.project(camera);
+    const x = (v.x * 0.5 + 0.5) * W;
+    const y = (-v.y * 0.5 + 0.5) * H;
+    if (v.z > 1 || !showLabels) {
+      el.style.opacity = 0;
+    } else {
+      el.style.opacity = 1;
+      el.style.left = x + 'px';
+      el.style.top = y + 'px';
+    }
+  });
+}
+ 
+// ─── ORBIT CONTROLS (manual) ──────────────────────────────────────────────────
+let isDragging = false, isRight = false;
+let prevMouse = { x: 0, y: 0 };
+let spherical = { theta: 0.6, phi: 0.5, r: 8.5 };
+let target = new THREE.Vector3(0, 0.3, 0);
+ 
+renderer.domElement.addEventListener('mousedown', e => {
+  isDragging = true; isRight = e.button === 2;
+  prevMouse = { x: e.clientX, y: e.clientY };
+});
+renderer.domElement.addEventListener('contextmenu', e => e.preventDefault());
+window.addEventListener('mouseup', () => isDragging = false);
+window.addEventListener('mousemove', e => {
+  if (!isDragging) return;
+  const dx = (e.clientX - prevMouse.x) * 0.005;
+  const dy = (e.clientY - prevMouse.y) * 0.005;
+  prevMouse = { x: e.clientX, y: e.clientY };
+  if (!isRight) {
+    spherical.theta -= dx;
+    spherical.phi = Math.max(0.1, Math.min(1.4, spherical.phi + dy));
+  } else {
+    const right = new THREE.Vector3(-Math.cos(spherical.theta), 0, Math.sin(spherical.theta));
+    target.addScaledVector(right, dx * 2);
+    target.y -= dy * 2;
+  }
+});
+renderer.domElement.addEventListener('wheel', e => {
+  spherical.r = Math.max(3, Math.min(16, spherical.r + e.deltaY * 0.01));
+}, { passive: true });
+// Touch
+renderer.domElement.addEventListener('touchstart', e => {
+  isDragging = true;
+  prevMouse = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+});
+renderer.domElement.addEventListener('touchend', () => isDragging = false);
+renderer.domElement.addEventListener('touchmove', e => {
+  if (!isDragging) return;
+  const dx = (e.touches[0].clientX - prevMouse.x) * 0.006;
+  const dy = (e.touches[0].clientY - prevMouse.y) * 0.006;
+  prevMouse = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+  spherical.theta -= dx;
+  spherical.phi = Math.max(0.1, Math.min(1.4, spherical.phi + dy));
+});
+ 
+function updateCamera() {
+  camera.position.set(
+    target.x + spherical.r * Math.sin(spherical.phi) * Math.sin(spherical.theta),
+    target.y + spherical.r * Math.cos(spherical.phi),
+    target.z + spherical.r * Math.sin(spherical.phi) * Math.cos(spherical.theta)
+  );
+  camera.lookAt(target);
+}
+ 
+// ─── UI CONTROLS ─────────────────────────────────────────────────────────────
+document.getElementById('speed-slider').addEventListener('input', e => {
+  conveyorSpeed = parseFloat(e.target.value);
+});
+ 
+function toggleLabels() {
+  showLabels = !showLabels;
+  const btn = document.getElementById('btn-labels');
+  btn.classList.toggle('active', showLabels);
+  btn.textContent = showLabels ? '● Rótulos Visíveis' : '○ Rótulos Ocultos';
+}
+function toggleAuto() {
+  autoReject = !autoReject;
+  const btn = document.getElementById('btn-auto');
+  btn.classList.toggle('active', autoReject);
+  btn.textContent = autoReject ? '● Auto-Rejeição' : '○ Auto-Rejeição';
+}
+function toggleWireframe() {
+  wireframeMode = !wireframeMode;
+  const btn = document.getElementById('btn-wireframe');
+  btn.classList.toggle('active', wireframeMode);
+  btn.textContent = wireframeMode ? '● Wireframe' : '○ Wireframe';
+  Object.values(M).forEach(m => { if (m.isMaterial) m.wireframe = wireframeMode; });
+}
+ 
+// ─── EJECT FLASH ─────────────────────────────────────────────────────────────
+const ejFlash = document.getElementById('eject-flash');
+function flashEject() {
+  ejFlash.style.opacity = 1;
+  setTimeout(() => { ejFlash.style.opacity = 0; }, 200);
+}
+ 
+// ─── ANIMATE ─────────────────────────────────────────────────────────────────
+let t = 0;
+// Auto-reject: a cada N segundos, marca o próximo chocolate na esteira como rejeitado.
+// Ele só será ejetado quando chegar fisicamente na hitbox do ejector.
+let scheduleTimer = 0;
+const scheduleInterval = 4.2; // intervalo entre marcações de rejeição
+ 
+// Estados de cada chocolate:
+//   'moving'   — se movendo normalmente pela esteira
+//   'waiting'  — marcado como rejeitado, aguardando chegar na hitbox
+//   'ejecting' — pistão disparou, chocolate voando para a caixa
+//   'done'     — removido da cena
+ 
+// Variáveis de estado do pistão
+let pistonFired = false;  // true enquanto pistão está estendido
+ 
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = 0.016;
+  t += dt;
+ 
+  updateCamera();
+ 
+  // Belt color pulse
+  const beltPulse = 0.95 + 0.05 * Math.sin(t * conveyorSpeed * 8);
+  M.belt.color.setRGB(0.1 * beltPulse, 0.36 * beltPulse, 0.72 * beltPulse);
+ 
+  // Sensor beam pulse
+  sensorBeam.material.opacity = 0.08 + 0.12 * Math.abs(Math.sin(t * 4));
+ 
+  // LED blinking
+  M.emissiveGreen.emissiveIntensity = 0.4 + 0.4 * Math.abs(Math.sin(t * 1.8));
+  M.emissiveBlue.emissiveIntensity  = 0.3 + 0.3 * Math.abs(Math.sin(t * 3.2));
+ 
+  // Screen glow
+  screenGlow.material.emissiveIntensity = 1.3 + 0.3 * Math.sin(t * 0.5);
+ 
+  // ── Auto-reject scheduler ──
+  // Marca o próximo chocolate livre como 'waiting' (rejeitado pendente)
+  // Não dispara nada ainda — o disparo só acontece quando ele chegar na hitbox
+  scheduleTimer += dt;
+  if (autoReject && scheduleTimer > scheduleInterval) {
+    scheduleTimer = 0;
+    const candidate = chocolates.find(c => c.state === 'moving');
+    if (candidate) {
+      candidate.state = 'waiting';
+      candidate.rejected = true;
+    }
+  }
+ 
+  // ── Chocolate movement ──
+  chocolates.forEach(choc => {
+    if (choc.state === 'moving' || choc.state === 'waiting') {
+      // Avança pela esteira normalmente
+      choc.x += conveyorSpeed * dt * 0.55;
+      choc.group.position.x = choc.x;
+ 
+      // Chegou na hitbox do ejector?
+      if (choc.state === 'waiting' &&
+          choc.x >= EJECTOR_X - HITBOX_HALF &&
+          choc.x <= EJECTOR_X + HITBOX_HALF) {
+        // DISPARA: muda para ejecting, aciona pisão
+        choc.state = 'ejecting';
+        choc.ejectZ = 0;   // deslocamento acumulado em Z
+        choc.ejectVz = -2.8; // velocidade inicial em -Z (em direção à caixa)
+        choc.ejectVy = 0.6;  // pequeno salto vertical
+        pistonFired = true;
+        flashEject();
+        stats.rej++;
+        updateStats();
+      }
+ 
+      // Aprovado: passou pela hitbox sem ser rejeitado e chegou ao fim
+      if (choc.state === 'moving' && choc.x > 2.75) {
+        choc.state = 'done';
+        scene.remove(choc.group);
+        const idx = chocolates.indexOf(choc);
+        if (idx > -1) chocolates.splice(idx, 1);
+        stats.aprov++; stats.prod++;
+        updateStats();
+        setTimeout(() => chocolates.push(makeChocolate(-2.4)), 700);
+      }
+ 
+      // 'waiting' que passou da hitbox sem disparar (não deveria acontecer, mas segurança)
+      if (choc.state === 'waiting' && choc.x > EJECTOR_X + HITBOX_HALF + 0.3) {
+        choc.state = 'moving'; // desiste, vira aprovado
+        choc.rejected = false;
+      }
+    } else if (choc.state === 'ejecting') {
+      // Física da ejeção: voa em -Z com gravidade e gira
+      choc.ejectVy -= 12 * dt;
+      choc.ejectZ  += choc.ejectVz * dt;
+      choc.group.position.z = choc.ejectZ;
+      choc.group.position.y = 0.215 + choc.ejectVy * dt * 8;
+      choc.group.position.y = Math.max(-0.12, choc.group.position.y);
+      choc.group.rotation.x += dt * 4.0;
+      choc.group.rotation.y += dt * 2.0;
+ 
+      // Chegou perto da caixa (z ≈ -0.65)
+      if (choc.ejectZ < -0.68) {
+        choc.state = 'done';
+        scene.remove(choc.group);
+        const idx = chocolates.indexOf(choc);
+        if (idx > -1) chocolates.splice(idx, 1);
+        stats.prod++;
+        updateStats();
+        // Retrai pistão após ejeção
+        setTimeout(() => { pistonFired = false; }, 400);
+        setTimeout(() => chocolates.push(makeChocolate(-2.4)), 900);
+      }
+    }
+  });
+ 
+  // ── Ejector piston animation ──
+  // Índices no ejectorGroup: 0=ejCyl, 1=ejBracketH, 2=ejBracketV, 3=ejRod, 4=ejPlate
+  // Haste (3) e plate (4) se movem em -Z quando pistonFired=true
+  const pistonTarget = pistonFired ? -0.30 : 0;
+  const ejChildren = ejectorGroup.children;
+  if (ejChildren[3]) ejChildren[3].position.z = THREE.MathUtils.lerp(ejChildren[3].position.z, -0.37 + pistonTarget, 0.18);
+  if (ejChildren[4]) ejChildren[4].position.z = THREE.MathUtils.lerp(ejChildren[4].position.z, -0.53 + pistonTarget, 0.18);
+ 
+  updateLabels();
+  renderer.render(scene, camera);
+}
+ 
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+ 
+updateStats();
+animate();
+</script>
+</body>
+</html>

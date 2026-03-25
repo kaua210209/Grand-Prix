@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from './supabaseClient';
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip, Legend } from 'recharts';
-import { AlertTriangle, Package, DollarSign, Activity, Clock, Play, Trash2 } from 'lucide-react';
-import Swal from 'sweetalert2'; // Importação do SweetAlert2
+// Adicionei o ícone "Box" ou "Cpu" para o botão do simulador
+import { AlertTriangle, Package, DollarSign, Activity, Clock, Play, Trash2, Box } from 'lucide-react'; 
+import Swal from 'sweetalert2';
 
 const COLORS = ['#ef4444', '#f97316', '#3b82f6', '#eab308'];
 
@@ -12,14 +13,11 @@ function App() {
   useEffect(() => {
     fetchDeteccoes();
 
-    // Inscrição em Tempo Real
     const subscription = supabase
       .channel('deteccoes_realtime')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'deteccoes' }, 
         payload => {
           setData(prev => [payload.new, ...prev]);
-          
-          // DISPARAR ALERTA AUTOMÁTICO
           dispararAlertaContaminacao(payload.new.tipo_contaminante);
         })
       .subscribe();
@@ -35,7 +33,6 @@ function App() {
     if (!error) setData(logs);
   }
 
-  // Configuração do Alerta Visual Estilizado
   const dispararAlertaContaminacao = (tipo) => {
     Swal.fire({
       title: '⚠️ ALERTA DE QUALIDADE',
@@ -43,8 +40,6 @@ function App() {
       icon: 'error',
       timer: 3500,
       timerProgressBar: true,
-      toast: false,
-      position: 'center',
       showConfirmButton: false,
       background: '#fff',
       color: '#1f2937',
@@ -52,21 +47,18 @@ function App() {
     });
   };
 
+  // Função para navegar para o simulador 3D
+  const irParaSimulador = () => {
+    window.location.href = '/index2.html';
+  };
+
   async function simularDeteccao() {
     const tipos = ['Ferroso', 'Não Ferroso', 'Inox', 'Metálico'];
     const tipoSorteado = tipos[Math.floor(Math.random() * tipos.length)];
-    
     const { error } = await supabase
       .from('deteccoes')
-      .insert([{ 
-        tipo_contaminante: tipoSorteado, 
-        custo_prejuizo: 1.50, 
-        status: 'Contaminado' 
-      }]);
-    
-    if (error) {
-      Swal.fire('Erro de Conexão', 'Verifique a RLS no Supabase', 'warning');
-    }
+      .insert([{ tipo_contaminante: tipoSorteado, custo_prejuizo: 1.50, status: 'Contaminado' }]);
+    if (error) Swal.fire('Erro', 'Erro ao conectar ao banco', 'error');
   }
 
   async function resetarProducao() {
@@ -76,7 +68,6 @@ function App() {
       icon: 'warning',
       showCancelButton: true,
       confirmButtonColor: '#4f46e5',
-      cancelButtonColor: '#ef4444',
       confirmButtonText: 'Sim, resetar!',
       cancelButtonText: 'Cancelar'
     }).then(async (result) => {
@@ -84,13 +75,12 @@ function App() {
         const { error } = await supabase.from('deteccoes').delete().neq('id', '00000000-0000-0000-0000-000000000000');
         if (!error) {
           setData([]);
-          Swal.fire('Sucesso', 'Dados limpos com sucesso!', 'success');
+          Swal.fire('Sucesso', 'Dados limpos!', 'success');
         }
       }
     });
   }
 
-  // Regra de Negócio: 1 contaminado para 13 não contaminados
   const totalDefeitos = data.length;
   const totalProducaoCalculado = totalDefeitos * 14; 
   const prejuizoTotal = data.reduce((acc, curr) => acc + Number(curr.custo_prejuizo), 0);
@@ -111,17 +101,26 @@ function App() {
           <p className="text-slate-400 font-bold text-xs uppercase tracking-[0.3em]">Monitoramento em Tempo Real</p>
         </div>
         
-        <div className="flex gap-4">
-          <button onClick={simularDeteccao} className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-3 rounded-2xl font-black shadow-lg shadow-indigo-200 transition-all active:scale-95">
-            <Play size={20} fill="currentColor" /> SIMULAR SENSOR
+        <div className="flex flex-wrap gap-3">
+          {/* BOTÃO DO SIMULADOR 3D */}
+          <button 
+            onClick={irParaSimulador} 
+            className="flex items-center gap-2 bg-slate-800 hover:bg-black text-white px-6 py-3 rounded-2xl font-bold transition-all active:scale-95 shadow-lg shadow-slate-200"
+          >
+            <Box size={20} /> VISTA 3D
           </button>
+
+          <button onClick={simularDeteccao} className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-2xl font-black shadow-lg shadow-indigo-200 transition-all active:scale-95">
+            <Play size={20} fill="currentColor" /> SIMULAR
+          </button>
+          
           <button onClick={resetarProducao} className="flex items-center gap-2 bg-slate-100 hover:bg-red-50 text-slate-400 hover:text-red-500 px-6 py-3 rounded-2xl font-bold transition-all">
             <Trash2 size={20} /> RESET
           </button>
         </div>
       </header>
 
-      {/* KPIs */}
+      {/* Grid de KPIs */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8 text-white">
         <CardKpi icon={<Package size={28}/>} title="Produção Total" value={`${totalProducaoCalculado} un`} color="bg-blue-600" />
         <CardKpi icon={<AlertTriangle size={28}/>} title="Contaminados" value={`${totalDefeitos} un`} color="bg-red-500" />
@@ -130,7 +129,6 @@ function App() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Gráfico */}
         <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100">
           <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest mb-8 text-center">Tipos de Materiais</h3>
           <div className="h-64">
@@ -150,7 +148,6 @@ function App() {
           </div>
         </div>
 
-        {/* Lista */}
         <div className="lg:col-span-2 bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100">
           <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest mb-8 flex items-center gap-2">
             <Clock size={18}/> Histórico da Linha
